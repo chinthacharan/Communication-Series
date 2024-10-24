@@ -44,4 +44,99 @@ module fifo_top(
             endcase
         end
     end
+
+    assign push = push_in & ~full_t;
+    assign pop = pop_in & ~empty_t;
+
+    assign dout = mem[0];
+
+    //write pointer update
+    always @(posedge clk, posedge rst) begin
+        if(rst)
+            waddr <= 4'h0;
+        else begin
+            case({push, pop})
+                2'b10: begin
+                    if(waddr != 4'hf && full_t == 1'b0)
+                      waddr <= waddr + 1;
+                    else
+                      waddr <= waddr;
+                end 
+
+                2'b01: begin
+                    if(waddr != 0 && empty_t == 1'b0)
+                      waddr <= waddr - 1;
+                    else
+                      waddr <= waddr;
+                end
+
+                default: ;
+        endcase
+        end 
+    end
+
+    //memory updatte
+
+    always@(posedge clk, posedge rst) begin
+        case({push, pop})
+         2'b01: begin
+            for(int i=0; i<14; i++) begin
+                mem[i] <= mem[i+1];
+            end
+
+            mem[15] <= 8'h00;
+         end
+
+         2'b10: begin
+            mem[waddr] <= din;
+         end
+
+         2'b11: begin
+            for(int i=0; i< 14; i++) begin
+                mem[i] <= mem[i+1];
+            end
+            mem[15] <= 8'h00;
+            mem[waddr-1] <= din;
+         end
+        endcase
+    end
+
+    //underrun
+    reg underrun_t;
+    always@(posedge clk, posedge rst) begin
+        if(rst)
+            underrun_t <= 1'b0;
+        else if(pop_in == 1'b1 && empty_t == 1'b1)
+            underrun_t <= 1'b1;
+        else
+            underrun_t <= 1'b0; 
+    end
+
+    //overrun
+    reg overrun_t = 1'b0;
+    always@(posedge clk, posedge rst) begin
+        if(rst)
+          overrun_t <= 1'b0;
+        else if(push_in == 1'b1 && full_t == 1'b1)
+          overrun_t <= 1'b1;
+        else 
+          overrun_t <= 1'b0;
+    end
+
+    //threshold
+    reg thre_t;
+    always@(posedge clk, posedge rst) begin
+        if(rst)
+          thre_t <= 1'b0;
+        else if(push ^ pop) begin
+            thre_t <= (waddr >= threshold) ? 1'b1 : 1'b0;
+        end
+    end
+
+    assign empty = empty_t;
+    assign full = full_t;
+    assign overrun = overrun_t;
+    assign underrun = underrun_t;
+    assign thre_trigger = thre_t;
+
 endmodule
